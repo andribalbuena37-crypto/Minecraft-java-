@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>MiniCraft Java</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#78a7ff;font-family:monospace;touch-action:none;user-select:none;-webkit-user-select:none}
+#hud{position:fixed;bottom:6px;left:50%;transform:translateX(-50%);display:flex;background:#0007;border:3px solid #222;box-sizing:border-box}
+.s{width:44px;height:44px;border:3px solid #3b3b3b;box-sizing:border-box;background:#8b8b8b44;position:relative}
+.s.on{border:4px solid #fff;margin:-2px;z-index:1}
+.s canvas{width:100%;height:100%;image-rendering:pixelated;padding:3px;box-sizing:border-box}
+.s b{position:absolute;right:2px;bottom:0;color:#fff;font-size:13px;text-shadow:2px 2px #3f3f3f}
+#cr{position:fixed;top:50%;left:50%;width:18px;height:18px;transform:translate(-50%,-50%);pointer-events:none;mix-blend-mode:difference}
+#cr:before,#cr:after{content:"";position:absolute;background:#fff}
+#cr:before{left:8px;top:0;width:2px;height:18px}#cr:after{top:8px;left:0;height:2px;width:18px}
+#dbg{position:fixed;top:4px;left:6px;color:#fff;font-size:13px;text-shadow:1px 1px #000;white-space:pre;pointer-events:none}
+#w{position:fixed;inset:0;background:#1a4cc888;display:none;pointer-events:none}
+#hand{position:fixed;right:9%;bottom:-50px;width:80px;height:220px;background:#c68e5e;box-shadow:inset -16px 0 #a8744a,inset 0 16px #dcaa7c;transform:rotate(16deg);transform-origin:bottom;pointer-events:none}
+#hand.sw{animation:sw .3s infinite}
+@keyframes sw{50%{transform:rotate(-10deg) translateY(-30px)}}
+#m,#cf{position:fixed;inset:0;background:#000c;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:16px;line-height:1.5;gap:8px}
+#cf{display:none}
+button{font:inherit;padding:10px 18px;background:#8b8b8b;border:3px solid;border-color:#fff #373737 #373737 #fff;cursor:pointer}
+.t{position:fixed;width:56px;height:56px;border-radius:12px;background:#fff7;border:0;color:#000;font-size:12px;display:none;padding:0}
+</style></head><body>
+<div id="dbg"></div><div id="w"></div><div id="hand"></div><div id="cr"></div><div id="hud"></div>
+<button class="t" id="bj" style="right:16px;bottom:100px">Saltar</button>
+<button class="t" id="bb" style="right:84px;bottom:60px">Romper</button>
+<button class="t" id="bp" style="right:16px;bottom:34px;display:none">Poner</button>
+<button class="t" id="be" style="left:16px;top:60px">E</button>
+<div id="cf"><h2>Fabricación</h2>
+<button id="r1">1 Tronco → 4 Tablones</button><button id="cx">Cerrar (E)</button></div>
+<div id="m"><h1>MiniCraft Java</h1>
+<p>Explora, mina, construye y sobrevive. El mundo tiene colinas, cuevas, ríos, árboles, minerales y ciclo día/noche.<br>
+PC: WASD · Espacio saltar · Shift correr · Mantén clic izq. para romper · Clic der. poner · 1-9 o rueda · E fabricar · G creativo<br>
+Móvil: dedo izquierdo mueve, derecho mira, usa los botones.</p>
+<label><input type="checkbox" id="ck"> Modo creativo</label>
+<button id="go">JUGAR</button></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const W=96,H=48,CS=16,NC=W/CS,SEA=17,N=14,D=new Uint8Array(W*H*W),I=(x,y,z)=>(y*W+z)*W+x;
+const hs=(x,y,s)=>{const v=Math.sin(x*127.1+y*311.7+s*74.7)*43758.5453;return v-Math.floor(v)};
+const vn=(x,z,s)=>{const i=Math.floor(x),j=Math.floor(z);let a=x-i,b=z-j;a*=a*(3-2*a);b*=b*(3-2*b);
+const g=(p,q)=>hs(i+p,j+q,s);return(g(0,0)*(1-a)+g(1,0)*a)*(1-b)+(g(0,1)*(1-a)+g(1,1)*a)*b};
+// ===== Texturas pixel-art 16x16 =====
+const cv=document.createElement('canvas');cv.width=N*16;cv.height=16;const cx=cv.getContext('2d');
+const sh=(c,k)=>[c[0]+k,c[1]+k,c[2]+k];
+function tx(t,f){for(let y=0;y<16;y++)for(let x=0;x<16;x++){const c=f(x,y,hs(x,y,t));if(c){cx.fillStyle=`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${c[3]??1})`;cx.fillRect(t*16+x,y,1,1)}}}
+const GR=(r)=>sh([100,165,60],(r-.5)*34),dirtF=(x,y,r)=>sh([134,96,67],(r-.5)*36),stoneF=(x,y,r)=>sh([125,125,125],(r-.5)*28);
+tx(0,(x,y,r)=>GR(r));
+tx(1,(x,y,r)=>y<3||(y==3&&r>.5)?GR(r):dirtF(x,y,r));
+tx(2,dirtF);tx(3,stoneF);
+tx(4,(x,y,r)=>{const e=y%5==0||(x+((y/5)|0)*4)%8==0,c=sh([128,128,128],(r-.5)*30);return e?sh(c,-48):c});
+tx(5,(x,y,r)=>sh([104,82,50],(hs(x,0,5)-.5)*40+(r-.5)*14));
+tx(6,(x,y,r)=>{const d=Math.max(Math.abs(x-7.5),Math.abs(y-7.5));return d>6?sh([95,75,45],(r-.5)*20):sh(d%3<1.5?[172,142,92]:[150,120,75],(r-.5)*14)});
+tx(7,(x,y,r)=>r<.2?null:sh([55,125,35],(hs(y,x,3)-.5)*60));
+tx(8,(x,y,r)=>sh([219,207,163],(r-.5)*16));
+const P2=[[3,3],[4,3],[3,4],[10,5],[11,5],[10,6],[6,11],[7,11],[7,12],[12,12],[13,12]];
+const ore=c=>(x,y,r)=>P2.some(p=>p[0]==x&&p[1]==y)?sh(c,(r-.5)*20):stoneF(x,y,r);
+tx(9,ore([28,28,28]));tx(10,ore([216,175,147]));
+tx(11,(x,y,r)=>{const c=sh([157,128,79],(r-.5)*18);return y%4==3||x==((y>>2)*7+3)%16?sh(c,-35):c});
+tx(12,(x,y,r)=>sh([70,70,70],(r-.5)*70));
+tx(13,(x,y,r)=>[40,85,205+r*30,.65]);
+const A=new THREE.CanvasTexture(cv);A.magFilter=A.minFilter=THREE.NearestFilter;A.generateMipmaps=false;
+const mO=new THREE.MeshBasicMaterial({map:A,vertexColors:true,alphaTest:.5}),mW=new THREE.MeshBasicMaterial({map:A,vertexColors:true,transparent:true,depthWrite:false});
+// lado, arriba, abajo
+const TT={1:[1,0,2],2:[2,2,2],3:[3,3,3],4:[4,4,4],5:[5,6,6],6:[7,7,7],7:[8,8,8],8:[9,9,9],9:[10,10,10],10:[11,11,11],11:[12,12,12],12:[13,13,13]};
+const HD={1:.6,2:.5,3:1.5,4:2,5:2,6:.2,7:.5,8:3,9:3,10:2},DR={1:2,3:4,6:0};
+// ===== Mundo =====
+const hm=[];let sd=1;const rnd=()=>hs(sd++,7,1);
+for(let x=0;x<W;x++)for(let z=0;z<W;z++){
+const h=Math.floor(20+(vn(x/28,z/28,1)-.5)*26+(vn(x/9,z/9,2)-.5)*7+(vn(x/3,z/3,3)-.5)*1.5);hm[x*W+z]=h;
+for(let y=0;y<=Math.max(h,SEA);y++){let b=0;
+if(y<=h){if(y==0)b=11;else if(y==1&&hs(x,z,9)<.5)b=11;else if(y==h)b=h<=SEA+1?7:1;else if(y>h-4)b=h<=SEA+1?7:2;
+else{b=3;const r=hs(x+y*17,z,4);if(r<.012)b=8;else if(r>.992&&y<24)b=9}
+if((b==3||b==8||b==9)&&y>2&&y<h-3&&Math.sin(x*.19+y*.07)*Math.sin(y*.21+z*.06)*Math.sin(z*.18+x*.05+y*.1)>.62)b=0}
+else b=12;D[I(x,y,z)]=b}}
+for(let i=0;i<70;i++){const x=3+Math.floor(rnd()*(W-6)),z=3+Math.floor(rnd()*(W-6)),h=hm[x*W+z];
+if(h<=SEA+1||D[I(x,h,z)]!=1)continue;const t=4+Math.floor(rnd()*3);
+for(let dy=t-2;dy<=t+1;dy++){const r=dy>=t?1:2;for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
+if(r==2&&Math.abs(dx)==2&&Math.abs(dz)==2&&rnd()<.5)continue;if(dy==t+1&&Math.abs(dx)+Math.abs(dz)>1)continue;
+if(!D[I(x+dx,h+dy,z+dz)])D[I(x+dx,h+dy,z+dz)]=6}}
+for(let y=h+1;y<=h+t;y++)D[I(x,y,z)]=5}
+const gb=(x,y,z)=>x<0||x>=W||z<0||z>=W||y<0?99:y>=H?0:D[I(x,y,z)];
+const solid=(x,y,z)=>{const b=gb(x,y,z);return b>0&&b!=12};
+const wat=(x,y,z)=>gb(x,y,z)==12,opq=b=>b>0&&b!=12&&b!=6;
+// ===== Escena =====
+const scene=new THREE.Scene(),bg=new THREE.Color(0x78a7ff);scene.background=bg;scene.fog=new THREE.Fog(0x78a7ff,35,90);
+const cam=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,250);cam.rotation.order='YXZ';
+const R=new THREE.WebGLRenderer();R.setPixelRatio(Math.min(devicePixelRatio,1.5));R.setSize(innerWidth,innerHeight);document.body.appendChild(R.domElement);
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();R.setSize(innerWidth,innerHeight)});
+const F=[[1,0,0,[[1,0,1],[1,0,0],[1,1,0],[1,1,1]],.6],[-1,0,0,[[0,0,0],[0,0,1],[0,1,1],[0,1,0]],.6],[0,1,0,[[0,1,1],[1,1,1],[1,1,0],[0,1,0]],1],[0,-1,0,[[0,0,0],[1,0,0],[1,0,1],[0,0,1]],.5],[0,0,1,[[0,0,1],[1,0,1],[1,1,1],[0,1,1]],.8],[0,0,-1,[[1,0,0],[0,0,0],[0,1,0],[1,1,0]],.8]];
+const UV=[[.003,0],[.997,0],[.997,1],[.003,1]],ch=[];
+function mk(g,m){if(!g.i.length)return null;const G=new THREE.BufferGeometry();
+G.setAttribute('position',new THREE.Float32BufferAttribute(g.p,3));G.setAttribute('uv',new THREE.Float32BufferAttribute(g.u,2));G.setAttribute('color',new THREE.Float32BufferAttribute(g.c,3));G.setIndex(g.i);
+const me=new THREE.Mesh(G,m);if(m==mW)me.renderOrder=1;scene.add(me);return me}
+function buildC(cx_,cz_){const o={p:[],u:[],c:[],i:[]},w={p:[],u:[],c:[],i:[]};
+for(let y=0;y<H;y++)for(let z=cz_*CS;z<cz_*CS+CS;z++)for(let x=cx_*CS;x<cx_*CS+CS;x++){const b=D[I(x,y,z)];if(!b)continue;
+for(let f=0;f<6;f++){const q=F[f],nb=gb(x+q[0],y+q[1],z+q[2]);
+if(b==12?nb!=0:b==6?(opq(nb)||nb==6):opq(nb))continue;
+const g=b==12?w:o,t=TT[b][f==2?1:f==3?2:0],n=g.p.length/3,s=q[4];
+for(let k=0;k<4;k++){const v=q[3][k];g.p.push(x+v[0],y+v[1],z+v[2]);g.u.push((t+UV[k][0])/N,UV[k][1]);g.c.push(s,s,s)}
+g.i.push(n,n+1,n+2,n,n+2,n+3)}}
+const key=cx_*NC+cz_;if(ch[key])ch[key].forEach(m=>{scene.remove(m);m.geometry.dispose()});
+ch[key]=[mk(o,mO),mk(w,mW)].filter(Boolean)}
+for(let a=0;a<NC;a++)for(let b=0;b<NC;b++)buildC(a,b);
+function setB(x,y,z,v){D[I(x,y,z)]=v;const a=x>>4,b=z>>4;buildC(a,b);
+if(x%16==0&&a>0)buildC(a-1,b);if(x%16==15&&a<NC-1)buildC(a+1,b);if(z%16==0&&b>0)buildC(a,b-1);if(z%16==15&&b<NC-1)buildC(a,b+1)}
+// Cielo: sol, luna cuadrados, nubes
+const sk=new THREE.Group();scene.add(sk);
+const sq=(c,y)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.MeshBasicMaterial({color:c,fog:false,depthWrite:false,side:THREE.DoubleSide}));m.position.y=y;m.rotation.x=Math.PI/2;m.renderOrder=-1;sk.add(m)};
+sq(0xfff4b0,150);sq(0xd8dcec,-150);
+const cc=document.createElement('canvas');cc.width=cc.height=32;const c2=cc.getContext('2d');c2.fillStyle='#fff';
+for(let x=0;x<32;x++)for(let y=0;y<32;y++)if(vn(x/4,y/4,8)>.6)c2.fillRect(x,y,1,1);
+const CT=new THREE.CanvasTexture(cc);CT.wrapS=CT.wrapT=THREE.RepeatWrapping;CT.repeat.set(3,3);CT.magFilter=CT.minFilter=THREE.NearestFilter;
+const cm=new THREE.MeshBasicMaterial({map:CT,transparent:true,opacity:.85,side:THREE.DoubleSide,fog:false,depthWrite:false});
+const cl=new THREE.Mesh(new THREE.PlaneGeometry(600,600),cm);cl.rotation.x=-Math.PI/2;cl.position.y=H+14;scene.add(cl);
+const sel=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004,1.004,1.004)),new THREE.LineBasicMaterial({color:0}));scene.add(sel);
+const crk=new THREE.Mesh(new THREE.BoxGeometry(1.006,1.006,1.006),new THREE.MeshBasicMaterial({color:0,transparent:true,opacity:0,depthWrite:false}));scene.add(crk);
+// ===== Inventario / HUD =====
+let inv=[],cur=0,cre=false;const hud=document.getElementById('hud'),sl=[];
+for(let i=0;i<9;i++){const d=document.createElement('div');d.className='s';const c=document.createElement('canvas');c.width=c.height=16;const t=document.createElement('b');d.append(c,t);d.onclick=()=>pick(i);hud.appendChild(d);sl.push({d,c:c.getContext('2d'),t});inv.push({b:0,n:0})}
+function draw(){sl.forEach((e,i)=>{const s=inv[i];e.c.clearRect(0,0,16,16);if(s.n)e.c.drawImage(cv,TT[s.b][1]*16,0,16,16,0,0,16,16);e.t.textContent=s.n>1&&!cre?s.n:'';e.d.classList.toggle('on',i==cur)})}
+function pick(i){cur=(i+9)%9;draw()}
+function setCre(v){cre=v;inv=Array.from({length:9},(_,i)=>v?{b:[1,2,3,4,5,6,7,10,8][i],n:64}:{b:0,n:0});draw()}
+function add(b){if(!b)return;const s=inv.find(s=>s.b==b&&s.n<64)||inv.find(s=>!s.n);if(s){s.b=b;s.n++;draw()}}
+setCre(false);
+// ===== Jugador =====
+const P=new THREE.Vector3(),V=new THREE.Vector3();let yaw=0,pitch=0,ground=false,jmp=false,down=false,locked=false,cfo=false,bk='',bp=0,ang=.5;
+let sx=W/2;for(let r=0;r<40;r++)if(hm[(W/2+r)*W+W/2]>SEA+1){sx=W/2+r;break}
+P.set(sx+.5,hm[sx*W+W/2]+2.7,W/2+.5);
+const hit=(px,py,pz)=>{for(const x of[px-.3,px+.3])for(const y of[py-1.6,py-.8,py+.1])for(const z of[px==px?pz-.3:0,pz+.3])if(solid(Math.floor(x),Math.floor(y),Math.floor(z)))return true;return false};
+while(hit(P.x,P.y,P.z))P.y++;
+const K={},m=document.getElementById('m'),cf=document.getElementById('cf'),touch='ontouchstart' in window;
+addEventListener('keydown',e=>{K[e.code]=1;if(e.code=='Space')e.preventDefault();if(e.key>='1'&&e.key<='9')pick(e.key-1);
+if(e.code=='KeyG')setCre(!cre);if(e.code=='KeyE')toggleCf()});
+addEventListener('keyup',e=>K[e.code]=0);
+function toggleCf(){cfo=!cfo;cf.style.display=cfo?'flex':'none';if(cfo)document.exitPointerLock();else if(!touch)R.domElement.requestPointerLock()}
+document.getElementById('r1').onclick=()=>{const s=inv.find(s=>s.b==5&&s.n>0);if(s&&!cre){s.n--;if(!s.n)s.b=0;for(let i=0;i<4;i++)add(10);draw()}};
+document.getElementById('cx').onclick=toggleCf;be.onclick=toggleCf;
+document.getElementById('go').onclick=()=>{setCre(ck.checked);m.style.display='none';if(touch){document.querySelectorAll('.t').forEach(b=>b.style.display='block')}else R.domElement.requestPointerLock()};
+document.addEventListener('pointerlockchange',()=>{locked=document.pointerLockElement==R.domElement;if(!locked&&!touch&&!cfo)m.style.display='flex'});
+addEventListener('mousemove',e=>{if(!locked)return;yaw-=e.movementX*.0022;pitch=Math.max(-1.55,Math.min(1.55,pitch-e.movementY*.0022))});
+addEventListener('wheel',e=>pick(cur+(e.deltaY>0?1:-1)));addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('mousedown',e=>{if(!locked)return;if(e.button==0)down=true;else if(e.button==2)put()});addEventListener('mouseup',e=>{if(e.button==0)down=false});
+function ray(){const d=new THREE.Vector3();cam.getWorldDirection(d);let prev=null;
+for(let t=0;t<5;t+=.04){const x=Math.floor(P.x+d.x*t),y=Math.floor(P.y+d.y*t),z=Math.floor(P.z+d.z*t),b=gb(x,y,z);
+if(b>0&&b!=12&&b!=99)return{x,y,z,p:prev};prev=[x,y,z]}return null}
+function put(){const r=ray();if(!r||!r.p)return;const[x,y,z]=r.p,s=inv[cur];if(!s.n||y<0||y>=H)return;const old=D[I(x,y,z)];
+if(old!=0&&old!=12)return;setB(x,y,z,s.b);if(hit(P.x,P.y,P.z))setB(x,y,z,old);else if(!cre){s.n--;if(!s.n)s.b=0;draw()}}
+// Táctil
+let tl=null,tr=null,jx=0,jy=0;
+addEventListener('touchstart',e=>{for(const t of e.changedTouches){if(t.target.tagName=='BUTTON'||t.target.closest('.s'))continue;
+if(t.clientX<innerWidth/2&&!tl)tl={id:t.identifier,x:t.clientX,y:t.clientY};else if(!tr)tr={id:t.identifier,x:t.clientX,y:t.clientY,t:performance.now(),mv:0}}});
+addEventListener('touchmove',e=>{for(const t of e.changedTouches){
+if(tl&&t.identifier==tl.id){jx=Math.max(-1,Math.min(1,(t.clientX-tl.x)/50));jy=Math.max(-1,Math.min(1,(t.clientY-tl.y)/50))}
+else if(tr&&t.identifier==tr.id){tr.mv+=Math.abs(t.clientX-tr.x)+Math.abs(t.clientY-tr.y);yaw-=(t.clientX-tr.x)*.006;pitch=Math.max(-1.55,Math.min(1.55,pitch-(t.clientY-tr.y)*.006));tr.x=t.clientX;tr.y=t.clientY}}});
+addEventListener('touchend',e=>{for(const t of e.changedTouches){if(tl&&t.identifier==tl.id){tl=null;jx=jy=0}if(tr&&t.identifier==tr.id){if(tr.mv<8&&performance.now()-tr.t<250&&m.style.display=='none')put();tr=null}}});
+bj.ontouchstart=e=>{e.preventDefault();jmp=true};bj.ontouchend=()=>jmp=false;
+bb.ontouchstart=e=>{e.preventDefault();down=true};bb.ontouchend=()=>down=false;document.getElementById('bp').ontouchstart=e=>{e.preventDefault();put()};
+// ===== Bucle =====
+const dbg=document.getElementById('dbg'),hand=document.getElementById('hand'),wv=document.getElementById('w'),DAY=600;let last=performance.now();
+const SD=new THREE.Color(0x78a7ff),SN=new THREE.Color(0x04050c);
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,(now-last)/1000);last=now;
+const active=(locked||(touch&&m.style.display=='none'))&&!cfo;
+ang+=dt*Math.PI*2/DAY;const d=Math.max(.22,Math.min(1,Math.cos(ang)*1.4+.6)),dd=(d-.22)/.78;
+bg.copy(SN).lerp(SD,dd);scene.fog.color.copy(bg);mO.color.setScalar(d);mW.color.setScalar(d);cm.color.setScalar(d);
+sk.position.copy(P);sk.rotation.z=ang;cl.position.x=P.x;cl.position.z=P.z;CT.offset.set(P.x*3/600+now/1e5,-P.z*3/600);
+const sw=wat(Math.floor(P.x),Math.floor(P.y-1.2),Math.floor(P.z));let sp=K.ShiftLeft?5.6:4.3;
+if(active){const f=(K.KeyW?1:0)-(K.KeyS?1:0)-jy,s=(K.KeyD?1:0)-(K.KeyA?1:0)+jx;if(sw)sp*=.6;
+V.x=(-Math.sin(yaw)*f+Math.cos(yaw)*s)*sp;V.z=(-Math.cos(yaw)*f-Math.sin(yaw)*s)*sp;
+if((K.Space||jmp)&&ground&&!sw)V.y=8.8}else{V.x=V.z=0}
+V.y-=32*dt;if(V.y<-40)V.y=-40;
+if(sw){V.y=Math.max(V.y*.9,-2.5);if(active&&(K.Space||jmp))V.y=Math.min(V.y+40*dt,3.5)}
+let nx=P.x+V.x*dt;if(!hit(nx,P.y,P.z))P.x=nx;
+let ny=P.y+V.y*dt;ground=false;if(!hit(P.x,ny,P.z))P.y=ny;else{if(V.y<0)ground=true;V.y=0}
+let nz=P.z+V.z*dt;if(!hit(P.x,P.y,nz))P.z=nz;
+if(P.y<-10){P.set(W/2,40,W/2);V.set(0,0,0)}
+cam.position.copy(P);cam.rotation.set(pitch,yaw,0);
+wv.style.display=wat(Math.floor(P.x),Math.floor(P.y),Math.floor(P.z))?'block':'none';
+const r=active?ray():null;sel.visible=!!r;
+if(r){sel.position.set(r.x+.5,r.y+.5,r.z+.5);crk.position.copy(sel.position)}
+const b=r?D[I(r.x,r.y,r.z)]:0;
+if(r&&down&&b!=11){const k=r.x+','+r.y+','+r.z;if(k!=bk){bk=k;bp=0}bp+=dt;const need=cre?0:HD[b]*.6;crk.material.opacity=need?bp/need*.6:0;
+if(bp>=need){setB(r.x,r.y,r.z,0);if(!cre)add(DR[b]!==undefined?DR[b]:b);bp=0;bk='';crk.material.opacity=0}}
+else{bp=0;bk='';crk.material.opacity=0}
+hand.className=r&&down?'sw':'';
+dbg.textContent=`MiniCraft Java (HTML)\nXYZ: ${P.x.toFixed(3)} / ${(P.y-1.62).toFixed(3)} / ${P.z.toFixed(3)}\n${cre?'Creativo':'Supervivencia'}`;
+R.render(scene,cam)}
+requestAnimationFrame(loop);
+</script></body></html>
